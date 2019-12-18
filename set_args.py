@@ -8,7 +8,7 @@ def create_parser(dataset):
                             help='number of total epochs to run')
         parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                             help='manual epoch number (useful on restarts)')
-        parser.add_argument('--batch-size', default=256, type=int,
+        parser.add_argument('--batch-size', default=64, type=int,
                             metavar='N', help='labeled-batch size (default: 256)')
         parser.add_argument('--lr', '--learning-rate', default=0.002, type=float)
         parser.add_argument('--weight-decay', '--wd', default=5e-5, type=float,
@@ -27,7 +27,7 @@ def create_parser(dataset):
                             metavar='EPOCHS', help='checkpoint frequency in epochs, 0 to turn checkpointing off (default: 1)')
         parser.add_argument('--evaluation-epochs', default=1, type=int,
                             metavar='EPOCHS', help='evaluation frequency in epochs, 0 to turn evaluation off (default: 1)')
-        parser.add_argument('--print-freq', '-p', default=20, type=int,
+        parser.add_argument('--print-freq', '-p', default=128, type=int,
                             metavar='N', help='print frequency (default: 10)')
         parser.add_argument('--resume', default='', type=str, metavar='PATH',
                             help='path to latest checkpoint (default: none)')
@@ -39,11 +39,11 @@ def create_parser(dataset):
                             help='evaluate model on evaluation set')
         parser.add_argument('--num-workers', type=int, default=12,
                             help='Number of workers')
-        parser.add_argument('--epoch-iteration', type=int, default=256,
+        parser.add_argument('--epoch-iteration', type=int, default=1024,
                             help='train step of one epoch')
         parser.add_argument('--warmup-step', type=int, default=0,
                             help='Number of workers')
-        parser.add_argument('--alpha', default=0.75, type=float)
+        parser.add_argument('--alpha', default=0.5, type=float)
         parser.add_argument('--mixup', default=True, type=str2bool,
                             help='use mixup', metavar='BOOL')
         parser.add_argument('--stage2', type=int, default=192)

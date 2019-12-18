@@ -37,7 +37,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
 
     # switch to train mode
     model.train()
-    ema_model.train()
+#    ema_model.train()
 
     end = time.time()
     for i in range(args.epoch_iteration):
@@ -67,26 +67,28 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
             outputs_u1 = model(inputs_u1)
             outputs_u2 = model(inputs_u2)
             if args.mixup:
-                outputs_u1 = sharpen(outputs_u1)
-                outputs_u2 = sharpen(outputs_u2)
-        all_labels, outputs_u1, update_u = get_u_label(all_labels, outputs_u1, unlabel_index, epoch)
+                targets_u = (torch.softmax(outputs_u1, dim=1) + torch.softmax(outputs_u2, dim=1)) / 2        
+#                targets_u = targets_u ** 2
+#                targets_u = targets_u / targets_u.sum(dim=1, keepdim=True)
+        all_labels, targets_u, update_u,le_loss = get_u_label(all_labels, targets_u, unlabel_index, epoch)
         if epoch < args.stage1 or epoch > args.stage2:
-            outputs_u1 = outputs_u1.detach()
-        outputs_u2 = outputs_u2.detach()
+            targets_u = targets_u.detach()
         if args.mixup:
-            targets_x = targets_x_onehot.cuda()
+            targets_x = targets_x_onehot.cuda(non_blocking=True)
+            
             all_inputs = torch.cat([inputs_x, inputs_u1, inputs_u2], dim=0)
-            all_targets = torch.cat([targets_x, outputs_u1, outputs_u2], dim=0)
+            all_targets = torch.cat([targets_x, targets_u, targets_u], dim=0)
             outputs_x, outputs_u, targets_x, targets_u = mixup(all_inputs, all_targets, batch_size, model)
 
-            loss, class_loss, consistency_loss = semiloss_mixup(outputs_x, targets_x, outputs_u1, outputs_u2,
+            loss, class_loss, consistency_loss = semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u,
                                                                 epoch + i / args.epoch_iteration)
         else:
             outputs_x = model(inputs_x)
             outputs_u = model(inputs_u1)
             loss, class_loss, consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, outputs_u1, class_criterion,
                                                           consistency_criterion, epoch + i / args.epoch_iteration)
-
+        if le_loss:
+            loss+=le_loss
         meters.update('loss', loss.item())
         meters.update('class_loss', class_loss.item())
         meters.update('cons_loss', consistency_loss.item())
@@ -95,11 +97,11 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
-        ema_optimizer.step(bn=True)
+#        ema_optimizer.step(bn=True)
         if scheduler is not None:
             scheduler.step()
 
-        if epoch >= args.stage1 and epoch <= args.stage2:
+        if update_u:
             # update y_tilde by back-propagation
             update_u.data.sub_(600 * update_u.grad.data)
 
@@ -121,7 +123,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
     y_file = "all_unlabels_label.npy"
     np.save(y_file, all_labels)
 
-    #    ema_optimizer.step(bn=True)
+    ema_optimizer.step(bn=True)
     return meters.averages()['class_loss/avg'], meters.averages()['cons_loss/avg'], all_labels
 
 
@@ -211,7 +213,7 @@ class WeightEMA(object):
             for param, ema_param in zip(self.model.parameters(), self.ema_model.parameters()):
                 ema_param.data.mul_(self.alpha)
                 ema_param.data.add_(param.data.detach() * one_minus_alpha)
-                param.data.mul_(1 - args.weight_decay)
+                param.data.mul_(1 - self.wd)
 
 
 def update_ema_variables(model, ema_model, epoch, alpha):
@@ -307,10 +309,12 @@ def semiLoss(outputs_x, targets_x, outputs_u, targets_u, class_criterion, consis
 
 def semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u, epoch):
     probs_u = torch.softmax(outputs_u, dim=1)
+#    probs_x = torch.softmax(outputs_x,dim=1)
+#    class_loss = torch.mean(torch.sum(probs_x * (F.log_softmax(outputs_x, dim=1) - F.log_softmax(targets_x, dim=1)), 1))   
     class_loss = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
     consistency_loss = torch.mean((probs_u - targets_u)**2)
 #    consistency_loss = torch.mean(torch.sum(probs_u * (F.log_softmax(outputs_u, dim=1) - F.log_softmax(targets_u, dim=1)), 1))
-    #    consistency_loss = -torch.mean(torch.sum(F.log_softmax(outputs_u, dim=1) * targets_u, dim=1))
+#    consistency_loss = -torch.mean(torch.sum(F.log_softmax(outputs_u, dim=1) * targets_u, dim=1))
     consistency_weight = args.consistency * ramps.linear_rampup(epoch, args.epochs)
     return class_loss + consistency_weight * consistency_loss, class_loss, consistency_loss * consistency_weight
 
@@ -345,7 +349,6 @@ def confusion_matrix(preds, labels, n_class=33):
 
 def get_u_label(label, outputs, index, epoch):
     softmax = nn.Softmax(dim=1).cuda()
-    y = None
     if epoch < args.stage1:
         yy = outputs
         outputs = outputs.detach().cpu().numpy()
@@ -358,7 +361,13 @@ def get_u_label(label, outputs, index, epoch):
         y = torch.autograd.Variable(y, requires_grad=True)
         # obtain label distributions (y_hat)
         yy = softmax(y)
+        le = - torch.mean(torch.mul(softmax(outputs), logsoftmax(outputs)))
+    if epoch < args.stage1:
+        return label,yy,None,None
+    elif epoch < args.stage2:
+        return label,yy,y, 0.1* le
+    else:
+        return label,yy,None,None
 
-    return label, yy, y
 
 
