@@ -5,6 +5,7 @@ import torch.optim as optim
 import torch.utils.data as data
 from util.net import WideResNet
 from  util.cifar10 import *
+import os
 from set_args import create_parser
 def main():
     def create_model(ema=False):
@@ -103,5 +104,9 @@ def main():
 
 if __name__ == '__main__':
     args = create_parser('cifar10')
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+    if args.seed is None:
+        args.seed = random.randint(1, 10000)
+        np.random.seed(args.seed)
     set_args(args)
     main()

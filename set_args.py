@@ -48,6 +48,9 @@ def create_parser(dataset):
                             help='use mixup', metavar='BOOL')
         parser.add_argument('--stage2', type=int, default=192)
         parser.add_argument('--stage1', type=int, default=96)
+        parser.add_argument('--gpu', default='0', type=str,
+                    help='id(s) for CUDA_VISIBLE_DEVICES')
+        parser.add_argument('--seed', type=int, default=0, help='manual seed')
     else:
         parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
         parser.add_argument('--epochs', default=100, type=int, metavar='N',
