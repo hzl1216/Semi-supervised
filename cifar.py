@@ -3,7 +3,7 @@ import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data as data
-from util.net import WideResNet
+from util.net import WideResNet,Label_Prediction
 from  util.cifar10 import *
 import os
 from set_args import create_parser
@@ -54,7 +54,9 @@ def main():
         scheduler =  WarmupCosineSchedule(optimizer,warmup_step,totals)
     else:
         scheduler = None
+
     all_labels = np.zeros([len(train_unlabeled_set), 10])
+    label_prediction = Label_Prediction(len(train_unlabeled_set), 10)
     # optionally resume from a checkpoint
     title = 'tcga'
     if args.resume:
@@ -76,7 +78,7 @@ def main():
     for epoch in range(args.start_epoch, args.epochs):
         start_time = time.time()
         # train for one epoch
-        class_loss, cons_loss, all_labels = train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model,
+        class_loss, cons_loss, all_labels = train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model,label_prediction,
                                                        optimizer, ema_optimizer, all_labels, epoch, scheduler)
         print("--- training epoch in %s seconds ---" % (time.time() - start_time))
 

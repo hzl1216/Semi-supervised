@@ -21,7 +21,7 @@ def set_args(input_args):
     args = input_args
 
 
-def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer, ema_optimizer, all_labels,
+def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, label_prediction,optimizer, ema_optimizer, all_labels,
                epoch, scheduler=None):
     labeled_train_iter = iter(train_labeled_loader)
     unlabeled_train_iter = iter(train_unlabeled_loader)
@@ -68,9 +68,9 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
             outputs_u2 = model(inputs_u2)
             if args.mixup:
                 targets_u = (torch.softmax(outputs_u1, dim=1) + torch.softmax(outputs_u2, dim=1)) / 2        
-#                targets_u = targets_u ** 2
-#                targets_u = targets_u / targets_u.sum(dim=1, keepdim=True)
-        all_labels, targets_u, update_u,le_loss = get_u_label(all_labels, targets_u, unlabel_index, epoch)
+                targets_u = targets_u ** 2
+                targets_u = targets_u / targets_u.sum(dim=1, keepdim=True)
+        all_labels, targets_u, le_loss = get_u_label(all_labels, targets_u, unlabel_index, epoch,label_prediction)
         if epoch < args.stage1 or epoch > args.stage2:
             targets_u = targets_u.detach()
         if args.mixup:
@@ -101,12 +101,6 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
         if scheduler is not None:
             scheduler.step()
 
-        if update_u:
-            # update y_tilde by back-propagation
-            update_u.data.sub_(600 * update_u.grad.data)
-
-            all_labels[unlabel_index, :] = update_u.data.cpu().numpy()
-
         # measure elapsed time
         meters.update('batch_time', time.time() - end)
         end = time.time()
@@ -120,8 +114,8 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
                 'Cons {meters[cons_loss]:.4f}\t'.format(
                     epoch, i, args.epoch_iteration, meters=meters))
 
-    y_file = "all_unlabels_label.npy"
-    np.save(y_file, all_labels)
+    # y_file = "all_unlabels_label.npy"
+    # np.save(y_file, all_labels)
 
     ema_optimizer.step(bn=True)
     return meters.averages()['class_loss/avg'], meters.averages()['cons_loss/avg'], all_labels
@@ -347,27 +341,23 @@ def confusion_matrix(preds, labels, n_class=33):
     return conf_matrix
 
 
-def get_u_label(label, outputs, index, epoch):
+def get_u_label(labels, outputs, index, epoch, Label_Prediction):
     softmax = nn.Softmax(dim=1).cuda()
+    logsoftmax = nn.LogSoftmax(dim=1).cuda()
     if epoch < args.stage1:
-        yy = outputs
-        outputs = outputs.detach().cpu().numpy()
-        label[index, :] = outputs
-
+        pseudo_label = outputs
+        labels[index, :] = outputs.detach().cpu().numpy()
     else:
-        y = label[index, :]
-        y = torch.FloatTensor(y)
-        y = y.cuda(non_blocking=True)
-        y = torch.autograd.Variable(y, requires_grad=True)
-        # obtain label distributions (y_hat)
-        yy = softmax(y)
+        if Label_Prediction.is_init_embedding is False:
+            Label_Prediction.init_embedding(labels)
+        pseudo_label = Label_Prediction(index,outputs)
         le = - torch.mean(torch.mul(softmax(outputs), logsoftmax(outputs)))
     if epoch < args.stage1:
-        return label,yy,None,None
+        return labels,pseudo_label,None
     elif epoch < args.stage2:
-        return label,yy,y, 0.1* le
+        return labels,pseudo_label,0.1* le
     else:
-        return label,yy,None,None
+        return labels,pseudo_label,None
 
 
 
