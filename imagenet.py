@@ -150,7 +150,7 @@ def main():
             }, 'checkpoint_path', epoch + 1)
 
 if __name__ == '__main__':
-    args = create_parser('imagenet')
+    args = create_parser()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     if args.seed is None:
         args.seed = random.randint(1, 10000)
