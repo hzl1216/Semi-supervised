@@ -35,13 +35,13 @@ def get_cifar10(root, n_labeled,
     return train_labeled_dataset, train_unlabeled_dataset,train_unlabeled_dataset2, val_dataset, test_dataset
 
 
-def train_val_split(labels, n_labeled_per_class):
+def train_val_split(labels, n_labeled_per_class,classes=10):
     labels = np.array(labels)
     train_labeled_idxs = []
     train_unlabeled_idxs = []
     val_idxs = []
 
-    for i in range(10):
+    for i in range(classes):
         idxs = np.where(labels == i)[0]
         np.random.shuffle(idxs)
         train_labeled_idxs.extend(idxs[:n_labeled_per_class])
