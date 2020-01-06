@@ -23,14 +23,15 @@ def main():
             for param in model.parameters():
                 param.detach_()
         return model
+
     transform_aug = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
+        RandAugment(3, 7),
         transforms.ToTensor(),
+        CutoutDefault(16),
         transforms.Normalize(means, stds),
     ])
-    transform_aug.transforms.insert(2, RandAugment(3, 7))
-    transform_aug.transforms.append(CutoutDefault(16))
     transform_normal = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),

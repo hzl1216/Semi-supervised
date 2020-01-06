@@ -39,12 +39,12 @@ def main():
                 contrast=0.4,
                 saturation=0.4,
             ),
+            RandAugment(2, 9),
             transforms.ToTensor(),
             Lighting(0.1, _IMAGENET_PCA['eigval'], _IMAGENET_PCA['eigvec']),
+            CutoutDefault(0),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
-    transform_aug.transforms.insert(3, RandAugment(2, 9))
-    transform_aug.transforms.append(CutoutDefault(0))
     transform_normal = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=(0.08, 1.0), interpolation=Image.BICUBIC),
             transforms.RandomHorizontalFlip(),
