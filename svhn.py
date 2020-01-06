@@ -29,7 +29,7 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize(means, stds),
     ])
-    transform_aug.transforms.insert(2, RandAugment(3, 5))
+    transform_aug.transforms.insert(2, RandAugment(3, 7))
     transform_aug.transforms.append(CutoutDefault(16))
     transform_normal = transforms.Compose([
         transforms.RandomCrop(32, padding=4),

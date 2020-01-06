@@ -9,6 +9,9 @@ import os
 from set_args import create_parser
 from RandAugment import RandAugment
 from RandAugment.augmentations import CutoutDefault
+from autoaugment import CIFAR10Policy,Cutout
+means = (0.4914, 0.4822, 0.4465)
+stds =  (0.2471, 0.2435, 0.2616)
 def main():
     def create_model(ema=False):
         print("=> creating {ema}model ".format(
@@ -21,23 +24,31 @@ def main():
             for param in model.parameters():
                 param.detach_()
         return model
-    transform_aug = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize( (0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)),
+    # transform_aug = transforms.Compose([
+    #     transforms.RandomCrop(32, padding=4),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(means, stds),
+    # ])
+    # transform_aug.transforms.insert(2, RandAugment(3, 5))
+    # transform_aug.transforms.append(CutoutDefault(16))
+    transform_aug = transforms.Compose(
+        [transforms.RandomCrop(32, padding=4, fill=128),  # fill parameter needs torchvision installed from source
+         transforms.RandomHorizontalFlip(), CIFAR10Policy(),
+         transforms.ToTensor(),
+         Cutout(n_holes=1, length=16),  # (https://github.com/uoguelph-mlrg/Cutout/blob/master/util/cutout.py)
+         transforms.Normalize(means, stds),
     ])
-    transform_aug.transforms.insert(2, RandAugment(3, 5))
     transform_normal = transforms.Compose([
         transforms.RandomCrop(32, padding=4), 
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize( (0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)),
+        transforms.Normalize(means, stds),
     ])
-    transform_aug.transforms.append(CutoutDefault(16))    
+
     transform_val = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize( (0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)),
+        transforms.Normalize(means, stds),
     ])
 
     train_labeled_set, train_unlabeled_set, train_unlabeled_set2,val_set, test_set = get_cifar10('./data', args.n_labeled,
