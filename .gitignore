@@ -1,9 +1,9 @@
 .idea/
 *.swp
 
-data/
-result/
-checkpoint_path/
+data/*
+result/*
+checkpoint_path/*
 __pycache__/
 nohup.out
 test.py
