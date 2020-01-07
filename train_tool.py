@@ -191,8 +191,8 @@ class WeightEMA(object):
                 if args.optimizer == 'Adam':
                     param.data.mul_(1 - self.wd)
 
-def save_checkpoint(state, dirpath, epoch):
-    filename = 'checkpoint.{}.ckpt'.format(epoch)
+def save_checkpoint(name ,state, dirpath, epoch):
+    filename = '%s_%d.ckpt' % (name, epoch)
     checkpoint_path = os.path.join(dirpath, filename)
     torch.save(state, checkpoint_path)
     LOG.info("--- checkpoint saved to %s ---" % checkpoint_path)

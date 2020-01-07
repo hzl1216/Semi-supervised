@@ -115,7 +115,9 @@ def main(dataset):
             logger.append([epoch, class_loss, cons_loss, ema_val_loss, ema_val_acc,ema_test_loss, ema_test_acc])
 
         if args.checkpoint_epochs and (epoch + 1) % args.checkpoint_epochs == 0:
-            save_checkpoint({
+            save_checkpoint(
+                '%s_%d'%(dataset, args.n_labeled),
+                {
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'ema_state_dict': ema_model.state_dict(),
