@@ -2,11 +2,13 @@ import time
 import os
 
 from util import ramps
-from util.losses import *
+import torch.nn as nn
+import torch
 import logging
 from util.utils import *
 import math
 from torch.optim.lr_scheduler import LambdaLR
+import torch.nn.functional as F
 from sklearn.metrics import confusion_matrix
 
 LOG = logging.getLogger('main')
@@ -22,12 +24,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model,op
     labeled_train_iter = iter(train_labeled_loader)
     unlabeled_train_iter = iter(train_unlabeled_loader)
     class_criterion = nn.CrossEntropyLoss().cuda()
-    if args.consistency_type == 'mse':
-        consistency_criterion = softmax_mse_loss
-    elif args.consistency_type == 'kl':
-        consistency_criterion = softmax_kl_loss
-    else:
-        assert False, args.consistency_type
+
 
     meters = AverageMeterSet()
 
@@ -264,14 +261,10 @@ def mixup(all_inputs, all_targets, batch_size, model,epoch):
 
 
 def semiloss(outputs_x, targets_x, outputs_u, targets_u,epoch):
-    output_softmax = torch.nn.functional.softmax( output_x, dim=1 )()
-    gt_softmax = (target_x * output_softmax).sum(dim=1)
-    loss_mask = (gt_softmax <= confidence_th(epoch,0.1)).float().detach()
-    class_loss = -torch.sum(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1)*loss_mask)/ (loss_mask.sum()+1e-6)
+    class_loss = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
     consistency_loss = torch.mean(torch.sum(F.softmax(targets_u,1) * (F.log_softmax(targets_u, 1) - F.log_softmax(outputs_u, dim=1)), 1))
-    consistency_weight = args.consistency * ramps.linear_rampup(epoch, args.epochs)
 
-    return class_loss + consistency_loss, class_loss, consistency_loss 
+    return class_loss + args.consistency_weight*consistency_loss, class_loss, consistency_loss
 
 
 def semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u, epoch):

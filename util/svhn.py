@@ -15,26 +15,28 @@ class TransformTwice:
         return out1, out2
 
 
-def get_svhn(root, n_labeled,
+def get_svhn(root, n_labeled,val_size=-1,
                 transform_normal=None, transform_aug=None, transform_val=None,
                 download=True):
     base_dataset = torchvision.datasets.SVHN(root, split='train', download=download)
-    train_labeled_idxs, train_unlabeled_idxs, val_idxs = train_val_split(base_dataset.labels, int(n_labeled / 10))
+    train_labeled_idxs, train_unlabeled_idxs, val_idxs = train_val_split(base_dataset.labels, n_labeled, val_size)
 
     train_labeled_dataset = SVHN_labeled(root, train_labeled_idxs, split='train', transform=transform_normal)
     train_unlabeled_dataset = SVHN_unlabeled(root, train_unlabeled_idxs, split='train',
                                                 transform=TransformTwice(transform_aug, transform_normal))
     train_unlabeled_dataset2 = SVHN_unlabeled(root, train_unlabeled_idxs, split='train',
                                                  transform=transform_val)
-
-    val_dataset = SVHN_labeled(root, val_idxs, split='train', transform=transform_val, download=True)
+    if val_size>0:
+        val_dataset = SVHN_labeled(root, val_idxs, split='train', transform=transform_val, download=True)
+    else:
+        val_dataset = None
     test_dataset = SVHN_labeled(root, split='test', transform=transform_val, download=True)
 
-    print(f"#Labeled: {len(train_labeled_idxs)} #Unlabeled: {len(train_unlabeled_idxs)} #Val: {len(val_idxs)}")
+    print(f"#Labeled: {len(train_labeled_idxs)} #Unlabeled: {len(train_unlabeled_idxs)} #test: {len(val_idxs)} #test: {len(test_dataset)}")
     return train_labeled_dataset, train_unlabeled_dataset, train_unlabeled_dataset2, val_dataset, test_dataset
 
 
-def train_val_split(labels, n_labeled_per_class,classes=10):
+def train_val_split(labels, n_labeled,val_size,classes=10):
     labels = np.array(labels)
     train_labeled_idxs = []
     train_unlabeled_idxs = []
@@ -43,9 +45,12 @@ def train_val_split(labels, n_labeled_per_class,classes=10):
     for i in range(classes):
         idxs = np.where(labels == i)[0]
         np.random.shuffle(idxs)
-        train_labeled_idxs.extend(idxs[:n_labeled_per_class])
-        train_unlabeled_idxs.extend(idxs[n_labeled_per_class:-500])
-        val_idxs.extend(idxs[-500:])
+        train_labeled_idxs.extend(idxs[:n_labeled//classes])
+        if val_size>0:
+            train_unlabeled_idxs.extend(idxs[n_labeled//classes:-val_size//classes])
+            val_idxs.extend(idxs[-val_size//classes:])
+        else:
+            train_unlabeled_idxs.extend(idxs[n_labeled//classes:])
     np.random.shuffle(train_labeled_idxs)
     np.random.shuffle(train_unlabeled_idxs)
     np.random.shuffle(val_idxs)

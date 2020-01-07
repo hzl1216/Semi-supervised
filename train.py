@@ -3,72 +3,36 @@ import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data as data
-from util.net import WideResNet,ResNet50
-from  util.imagenet import *
+from util.net import WideResNet
+from util.cifar10 import get_cifar10
+from util.svhn import get_svhn
 import os
 from set_args import create_parser
-from RandAugment import RandAugment
-from RandAugment.augmentations import CutoutDefault,Lighting
-from PIL import Image
-_IMAGENET_PCA = {
-    'eigval': [0.2175, 0.0188, 0.0045],
-    'eigvec': [
-        [-0.5675,  0.7192,  0.4009],
-        [-0.5808, -0.0045, -0.8140],
-        [-0.5836, -0.6948,  0.4203],
-    ]
-}
-means=(0.485, 0.456, 0.406)
-stds=(0.229, 0.224, 0.225)
-def main():
+from util.data import get_data_augment
+def main(dataset):
+    print('start train %s '%dataset)
     def create_model(ema=False):
         print("=> creating {ema}model ".format(
             ema='EMA ' if ema else ''))
-
-        model = ResNet50(num_classes=1000)
+        model = WideResNet(num_classes=10)
         model = nn.DataParallel(model).cuda()
         if ema:
             for param in model.parameters():
                 param.detach_()
         return model
-    transform_aug = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.08, 1.0), interpolation=Image.BICUBIC),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(
-                brightness=0.4,
-                contrast=0.4,
-                saturation=0.4,
-            ),
-            RandAugment(2, 9),
-            transforms.ToTensor(),
-            Lighting(0.1, _IMAGENET_PCA['eigval'], _IMAGENET_PCA['eigvec']),
-            CutoutDefault(0),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-    transform_normal = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.08, 1.0), interpolation=Image.BICUBIC),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(
-                brightness=0.4,
-                contrast=0.4,
-                saturation=0.4,
-            ),
-            transforms.ToTensor(),
-            Lighting(0.1, _IMAGENET_PCA['eigval'], _IMAGENET_PCA['eigvec']),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-#
-    transform_val = transforms.Compose([
-            transforms.Resize(256, interpolation=Image.BICUBIC),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(means, stds),
-        ])
 
-    train_labeled_set, train_unlabeled_set, train_unlabeled_set2,val_set, test_set = get_imagenet('./data', args.n_labeled,
+    transform_aug, transform_normal, transform_val = get_data_augment(dataset)
+    if dataset == 'cifar10':
+        train_labeled_set, train_unlabeled_set, train_unlabeled_set2,val_set, test_set = get_cifar10('./data', args.n_labeled, args.val_size,
                                                                                     transform_normal=transform_normal,
                                                                                     transform_aug=transform_aug,
                                                                                     transform_val=transform_val)
+    if dataset == 'svhn':
+        train_labeled_set, train_unlabeled_set, train_unlabeled_set2, val_set, test_set = get_svhn('./data',
+                                                                                                      args.n_labeled,
+                                                                                                      transform_normal=transform_normal,
+                                                                                                      transform_aug=transform_aug,
+                                                                                                      transform_val=transform_val)
     train_labeled_loader = data.DataLoader(train_labeled_set, batch_size=args.batch_size, shuffle=True, num_workers=0,
                                           drop_last=True)
     train_unlabeled_loader = data.DataLoader(train_unlabeled_set, batch_size=args.batch_size*args.unsup_ratio, shuffle=True,
@@ -76,8 +40,8 @@ def main():
     train_unlabeled_loader2 = data.DataLoader(train_unlabeled_set2, batch_size=args.batch_size*args.unsup_ratio, shuffle=False,
                                             num_workers=0)
 
-
-    val_loader = data.DataLoader(val_set, batch_size=args.batch_size*args.unsup_ratio, shuffle=False, num_workers=0)
+    if args.val_size>0:
+        val_loader = data.DataLoader(val_set, batch_size=args.batch_size*args.unsup_ratio, shuffle=False, num_workers=0)
     test_loader = data.DataLoader(test_set, batch_size=args.batch_size*args.unsup_ratio, shuffle=False, num_workers=0)
     model = create_model()
     ema_model = create_model(ema=True)
@@ -98,7 +62,7 @@ def main():
         scheduler = None
     all_labels = np.zeros([len(train_unlabeled_set), 10])
     # optionally resume from a checkpoint
-    title = 'imagenet'
+    title = dataset
     if args.resume:
         assert os.path.isfile(args.resume), "=> no checkpoint found at '{}'".format(args.resume)
         print("=> loading checkpoint '{}'".format(args.resume))
@@ -108,14 +72,17 @@ def main():
         ema_model.load_state_dict(checkpoint['ema_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("Evaluating the  model:")
-        val_loss, val_acc = validate(val_loader, model, criterion,args.start_epoch)
+        if args.val_size>0:
+            val_loss, val_acc = validate(val_loader, model, criterion,args.start_epoch)
+        else:
+            val_loss, val_acc = 0, 0
         test_loss, test_acc = validate(test_loader, model, criterion, args.start_epoch)
         print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
 
-        logger = Logger(os.path.join(args.out_path, 'imagenet_log_%d.txt'%args.n_labeled), title=title, resume=True)
+        logger = Logger(os.path.join(args.out_path, '%s_log_%d.txt'%(dataset,args.n_labeled)), title=title, resume=True)
         logger.append([args.start_epoch, 0, 0, val_loss, val_acc,test_loss, test_acc])
     else:
-        logger = Logger(os.path.join(args.out_path, 'imagenet_log_%d.txt'%args.n_labeled), title=title)
+        logger = Logger(os.path.join(args.out_path, '%s_log_%d.txt'%(dataset,args.n_labeled)), title=title)
         logger.set_names(['epoch', 'Train_class_loss',  'Train_consistency_loss', 'Val_Loss', 'Val_Acc.', 'Test_Loss', 'Test_Acc.'])
 
     for epoch in range(args.start_epoch, args.epochs):
@@ -130,13 +97,19 @@ def main():
         if args.evaluation_epochs and (epoch + 1) % args.evaluation_epochs == 0:
             start_time = time.time()
             print("Evaluating the  model:")
-            val_loss, val_acc = validate(val_loader, model, criterion,epoch)
+            if args.val_size>0:
+                val_loss, val_acc = validate(val_loader, model, criterion,epoch)
+            else:
+                val_loss, val_acc = 0, 0
             test_loss, test_acc = validate(test_loader, model, criterion, epoch)
             print("--- validation in %s seconds ---" % (time.time() - start_time))
             logger.append([epoch, class_loss, cons_loss, val_loss, val_acc,test_loss, test_acc])
 
             print("Evaluating the EMA model:")
-            ema_val_loss, ema_val_acc = validate(val_loader, ema_model, criterion,epoch)
+            if args.val_size > 0:
+                ema_val_loss, ema_val_acc = validate(val_loader, ema_model, criterion,epoch)
+            else:
+                ema_val_loss, ema_val_acc = 0, 0
             ema_test_loss, ema_test_acc = validate(test_loader, ema_model, criterion, epoch)
             print("--- validation in %s seconds ---" % (time.time() - start_time))
             logger.append([epoch, class_loss, cons_loss, ema_val_loss, ema_val_acc,ema_test_loss, ema_test_acc])
@@ -156,5 +129,5 @@ if __name__ == '__main__':
         args.seed = random.randint(1, 10000)
         np.random.seed(args.seed)
     set_args(args)
-    main()
+    main(args.dataset)
 
