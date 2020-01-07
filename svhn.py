@@ -9,7 +9,7 @@ import os
 from set_args import create_parser
 from RandAugment import RandAugment
 from RandAugment.augmentations import CutoutDefault
-
+from autoaugment import SVHNPolicy,Cutout
 means = (0.4376821, 0.4437697, 0.47280442)
 stds = (0.19803012, 0.20101562, 0.19703614)
 def main():
@@ -24,17 +24,21 @@ def main():
                 param.detach_()
         return model
 
+    # transform_aug = transforms.Compose([
+    #     transforms.RandomCrop(32, padding=4),
+    #     transforms.RandomHorizontalFlip(),
+    #     RandAugment(3, 7),
+    #     transforms.ToTensor(),
+    #     CutoutDefault(16),
+    #     transforms.Normalize(means, stds),
+    # ])
     transform_aug = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        RandAugment(3, 7),
+        SVHNPolicy(),
         transforms.ToTensor(),
-        CutoutDefault(16),
+        Cutout(n_holes=1, length=20),
         transforms.Normalize(means, stds),
     ])
     transform_normal = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(means, stds),
     ])
