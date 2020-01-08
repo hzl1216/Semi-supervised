@@ -1,0 +1,1 @@
+python train.py --dataset=svhn --optimizer='sgd' --warmup-step=20 --lr=0.05 --weight-decay=0.0005 --epochs=400 --gpu=1
