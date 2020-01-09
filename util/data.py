@@ -33,6 +33,8 @@ def get_data_augment(dataset):
             transforms.Normalize(means, stds),
         ])
         transform_normal = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(means, stds),
         ])
