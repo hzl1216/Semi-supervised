@@ -8,7 +8,7 @@ from util.cifar10 import get_cifar10
 from util.svhn import get_svhn
 import os
 from set_args import create_parser
-from util.data import get_data_augment
+from util.data_augment import get_data_augment
 def main(dataset):
     print('start train %s '%dataset)
     def create_model(ema=False):
